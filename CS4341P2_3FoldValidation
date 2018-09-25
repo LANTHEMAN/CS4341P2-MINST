@@ -1,0 +1,139 @@
+import numpy as np
+import sys
+import matplotlib.pyplot as plt
+import keras
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Activation
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.models import load_model
+from keras.utils import np_utils
+from keras.datasets import mnist
+from sklearn.metrics import confusion_matrix
+import itertools
+from sklearn import svm, datasets
+from sklearn.model_selection import train_test_split
+from keras import regularizers
+from sklearn.metrics import confusion_matrix
+
+
+# confusion matrix plot grabbed from Sci-Kit Learn's documentation website http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+#Loading the data from the given labels, images and reshaping the images to have the correct shape
+np.set_printoptions(threshold=np.nan)
+ImageDatabase = np.load("images.npy")
+LabelDatabase = np.load("labels.npy")
+ImageDatabase = ImageDatabase.reshape(6500, 784)
+#Iteratively utilizing cross validation by creating training on different folds of the data
+ThreeFold = [[0,2167,2167,4333,4333,6500],[2167,4333,4333,6500,0,2167],[4333,6500,0,2167,2167,4333]]
+for f in ThreeFold:
+    ImageTrainingSet = ImageDatabase[f[0]:f[1]]
+    ImageValidationSet = ImageDatabase[f[2]:f[3]]
+    ImageTestSet = ImageDatabase[f[4]:f[5]]
+    #All of the pixel values
+    ImageTrainingSet = ImageTrainingSet.astype('float32')
+    ImageValidationSet = ImageValidationSet.astype('float32')
+    ImageTestSet = ImageTestSet.astype('float32')
+    #Normalizing the data
+    ImageTrainingSet = ImageTrainingSet / 255
+    ImageValidationSet = ImageValidationSet / 255
+    ImageTestSet = ImageTestSet / 255
+    #Labels converted into One-Hot Vector
+    LabelTrainingSet = LabelDatabase[f[0]:f[1]]
+    LabelValidationSet = LabelDatabase[f[2]:f[3]]
+    LabelTestSetNumeric = LabelDatabase[f[4]:f[5]]
+    LabelTrainingSet = np_utils.to_categorical(LabelTrainingSet, 10)
+    LabelValidationSet = np_utils.to_categorical(LabelValidationSet, 10)
+    LabelTestSet = np_utils.to_categorical(LabelTestSetNumeric, 10)
+    #keras initialization of our model
+    model = Sequential()
+    #adding Layers 1-10 with an input shape of 784 and activation of relu and a dropout of 20%
+    model.add(Dense(50, input_shape=(784,), activation='relu'))
+    #model.add(Dropout(0.2))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(50, activation='relu'))
+    model.add(Dense(10, activation='softmax'))
+    #creating the stocastic grradient descent
+    Sgd = keras.optimizers.SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True)
+    #compile our model and keeping track of the accuracy
+    model.compile(loss='categorical_crossentropy', optimizer=Sgd, metrics=["accuracy"])
+    #training the model on the training sets, and validation sets track the validation loss and accuracy
+    History = model.fit(ImageTrainingSet, LabelTrainingSet,
+                    batch_size=1024, epochs=500, verbose=1,
+                    validation_data=(ImageValidationSet, LabelValidationSet))
+    #The plot of the accuracy of the training set and validation set
+    fig = plt.figure()
+    plt.subplot(2, 1, 1)
+    plt.plot(History.history['acc'])
+    plt.plot(History.history['val_acc'])
+    plt.title('model accuracy')
+    plt.ylabel('accuracy')
+    plt.xlabel('epoch')
+    plt.legend(['train', 'test'], loc='lower right')
+    plt.show()
+    #Using our trained model it is time to use it to predict on the Test Set and create the confusion matrix
+    ypred = model.predict_classes(ImageTestSet, verbose=0)
+    cm = confusion_matrix(LabelTestSetNumeric, ypred)
+
+    # Compute confusion matrix
+    cnf_matrix = confusion_matrix(LabelTestSetNumeric, ypred)
+    np.set_printoptions(precision=2)
+
+    # Plot non-normalized confusion matrix
+    PlotClassLabels = ['0','1','2','3','4','5','6','7','8','9']
+    plt.figure()
+    plot_confusion_matrix(cnf_matrix, classes=PlotClassLabels,
+                      title='Confusion matrix, without normalization')
+
+
+    # Plot normalized confusion matrix
+    plt.figure()
+    plot_confusion_matrix(cnf_matrix, classes=PlotClassLabels, normalize=True,
+                      title='Normalized confusion matrix')
+
+    plt.show()
+    cm_plot_labels = ['Correct Labels ', 'Predicted Labels']
+    plot_confusion_matrix(cm, cm_plot_labels, title='Confusion Matrix')
+    #print out the acuracy score on our test sets
+    score = model.evaluate(ImageTestSet, LabelTestSet, verbose=0, batch_size=1024)
+    print('Test score:', score)
+    # print('Test accuracy:', score[1])
+
